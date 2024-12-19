@@ -5,17 +5,18 @@ date: "2024-12-14"
 ---
 ```{r}
 # Import Library
+library(readxl) 
+library(ggplot2) 
 library(dplyr)
-library(ggplot2)
-library(cluster)
-library(factoextra)
 library(caret)
-library(dbscan)
-library(fastcluster)
-library(reshape2)
+library(Metrics)
 library(corrplot)
-library(ppcor)
-```
+library(factoextra)
+library(tidyverse)
+library(cluster)
+library(ppcor) 
+library(car) 
+``` 
 
 # LOAD dataset
 ```{r}
@@ -29,8 +30,7 @@ data <- read.csv("D:/ITS_KULIAH/KULIAH_Semester 3/Analitika Data dan Diagnostik/
 data_nigeria <- data %>%
   filter(Country == "Nigeria", 
     Year == "2024", 
-    Disease.Name == "Ebola", 
-    Availability.of.Vaccines.Treatment == "Yes")
+    Disease.Name == "Malaria")
 ```
 
 
@@ -71,6 +71,10 @@ ggplot(cor_matrix_melted, aes(Var1, Var2, fill = value)) +
 ```
 
 ```{r}
+# Mengecek missing values
+colSums(is.na(data))
+
+# Karena tidak ada missing value, korelasi parsial bisa langsung dibuat
 partial_corr <- pcor(data[])
 print(partial_corr)
 ```
@@ -84,7 +88,10 @@ fviz_dist(jarak, gradient = list(low = "#667BC6", mid = "#FDFFD2", high = "#DA72
 ### PCA
 ```{r}
 pca <- prcomp(data, center = TRUE, scale. = TRUE)
-summary(pca)
+
+print(summary(pca))
+
+# Hasilkan grafik
 fviz_eig(pca, addlabels = TRUE, barfill = "lightblue", barcolor = "black")
 ```
 
@@ -100,12 +107,14 @@ fviz_nbclust(data, kmeans, method = "silhouette")
 ```{r}
 # K-Means dengan 3 kluster
 pca_data <- data.frame(pca$x)
-k3 <- kmeans(data, centers = 3, nstart = 25)
+k3 <- kmeans(data, centers = 10, nstart = 25)
+fviz_cluster(k3, data = pca_data[, c("PC1", "PC2")], geom = "point")
 fviz_cluster(k3, data = pca_data[, c("PC1", "PC3")], geom = "point")
+fviz_cluster(k3, data = pca_data[, c("PC1", "PC4")], geom = "point")
+fviz_cluster(k3, data = pca_data[, c("PC2", "PC3")], geom = "point")
 fviz_cluster(k3, data = pca_data[, c("PC2", "PC3")], geom = "point")
 fviz_cluster(k3, data = pca_data[, c("PC3", "PC4")], geom = "point")
-fviz_cluster(k3, data = pca_data[, c("PC2", "PC4")], geom = "point")
-fviz_cluster(k3, data = data)
+fviz_cluster(k3, data = data, geom = "point")
 ```
 
 ```{r}
@@ -118,43 +127,52 @@ db <- dbscan(data, eps = eps_value, minPts = minPts_value)
 fviz_cluster(db, data = data, geom = "point")
 ```
 
+
+### KESIMPULAN
 ```{r}
-# Membuat model regresi
-reg_model <- lm(Recovery.Rate.... ~ Doctors.per.1000 + Hospital.Beds.per.1000 + Healthcare.Access...., data = as.data.frame(data))
+# Menambahkan label klaster ke dataset untuk analisis lebih lanjut
+data$Cluster <- k3$cluster
 
-# Ringkasan model regresi
-summary(reg_model)
-```
+# Melihat statistik deskriptif per klaster
+cluster_summary <- aggregate(. ~ Cluster, data = data, FUN = mean)
 
-```{r}
-# Menghitung residu
-residuals <- resid(reg_model)
+# Menentukan jumlah klaster optimal
+optimal_clusters <- length(unique(data$Cluster))
 
-# Menghitung nilai prediksi
-predicted_values <- predict(reg_model)
-```
-
-```{r}
-library(ggplot2)
-
-# Plot residu vs nilai prediksi
-ggplot(data.frame(Residuals = residuals, Predicted = predicted_values), aes(x = Predicted, y = Residuals)) +
-  geom_point(color = "purple", alpha = 0.7) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "Plot Residu vs Nilai Prediksi",
-       x = "Nilai Prediksi",
-       y = "Residu") +
-  theme_minimal()
-```
-
-```{r}
-# QQ plot untuk memeriksa normalitas residu
-qqnorm(residuals)
-qqline(residuals, col = "blue")
-
-# Histogram residu
-ggplot(data.frame(Residuals = residuals), aes(x = Residuals)) +
-  geom_histogram(bins = 30, fill = "blue", color = "white", alpha = 0.7) +
-  labs(title = "Distribusi Residu", x = "Residu", y = "Frekuensi") +
-  theme_minimal()
+# Menampilkan rekomendasi berdasarkan rata-rata setiap klaster
+cat("\nRekomendasi berdasarkan klaster:\n")
+for (i in 1:optimal_clusters) {
+  cat(paste("Klaster", i, ":\n"))
+  cat(paste("\t- Recovery Rate rata-rata:", round(cluster_summary$Recovery.Rate....[i], 2), "%\n"))
+  cat(paste("\t- Doctors per 1000 rata-rata:", round(cluster_summary$Doctors.per.1000[i], 2), "\n"))
+  cat(paste("\t- Hospital Beds per 1000 rata-rata:", round(cluster_summary$Hospital.Beds.per.1000[i], 2), "\n"))
+  cat(paste("\t- Healthcare Access rata-rata:", round(cluster_summary$Healthcare.Access....[i], 2), "%\n"))
+  
+  # Menentukan rekomendasi berdasarkan rata-rata
+  recommendations <- c()
+  
+  if (cluster_summary$Recovery.Rate....[i] < 50) {
+    recommendations <- c(recommendations, "- Recovery rate rendah, perlu peningkatan dalam akses pengobatan dan perawatan medis.")
+  }
+  if (cluster_summary$Doctors.per.1000[i] < 1) {
+    recommendations <- c(recommendations, "- Jumlah dokter per 1000 orang rendah, perlu penambahan tenaga medis.")
+  }
+  if (cluster_summary$Hospital.Beds.per.1000[i] < 2) {
+    recommendations <- c(recommendations, "- Jumlah tempat tidur rumah sakit per 1000 orang rendah, perlu investasi dalam fasilitas rumah sakit.")
+  }
+  if (cluster_summary$Healthcare.Access....[i] < 70) {
+    recommendations <- c(recommendations, "- Akses terhadap layanan kesehatan terbatas, perlu pengembangan infrastruktur kesehatan.")
+  }
+  
+  # Jika ada rekomendasi, tampilkan
+  if (length(recommendations) > 0) {
+    cat("\t- Rekomendasi:\n")
+    for (rec in recommendations) {
+      cat(paste("\t  ", rec, "\n"))
+    }
+  } else {
+    cat("\t- Rekomendasi: Semua indikator sudah baik, teruskan kebijakan yang ada.\n")
+  }
+  cat("\n")
+}
 ```
