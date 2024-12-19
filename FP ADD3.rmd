@@ -16,6 +16,8 @@ library(tidyverse)
 library(cluster)
 library(ppcor) 
 library(car) 
+library(reshape2)
+library(dbscan)
 ``` 
 
 # LOAD dataset
@@ -44,6 +46,7 @@ data <- scale(data_nigeria[,
   "Healthcare.Access....")])
 ```
 
+# KORELASI
 ```{r}
 cor_matrix <- cor(data[])
 # Visualisasi matriks korelasi
@@ -88,7 +91,6 @@ fviz_dist(jarak, gradient = list(low = "#667BC6", mid = "#FDFFD2", high = "#DA72
 ### PCA
 ```{r}
 pca <- prcomp(data, center = TRUE, scale. = TRUE)
-
 print(summary(pca))
 
 # Hasilkan grafik
@@ -98,7 +100,7 @@ fviz_eig(pca, addlabels = TRUE, barfill = "lightblue", barcolor = "black")
 
 ### clustering
 ```{r}
-# Menentukan jumlah kluster
+# Menentukan jumlah kluster optimal
 fviz_nbclust(data, kmeans, method = "wss")
 fviz_nbclust(data, kmeans, method = "silhouette")
 ```
@@ -107,14 +109,9 @@ fviz_nbclust(data, kmeans, method = "silhouette")
 ```{r}
 # K-Means dengan 3 kluster
 pca_data <- data.frame(pca$x)
-k3 <- kmeans(data, centers = 10, nstart = 25)
+k3 <- kmeans(data, centers = 3, nstart = 25)
 fviz_cluster(k3, data = pca_data[, c("PC1", "PC2")], geom = "point")
-fviz_cluster(k3, data = pca_data[, c("PC1", "PC3")], geom = "point")
-fviz_cluster(k3, data = pca_data[, c("PC1", "PC4")], geom = "point")
-fviz_cluster(k3, data = pca_data[, c("PC2", "PC3")], geom = "point")
-fviz_cluster(k3, data = pca_data[, c("PC2", "PC3")], geom = "point")
-fviz_cluster(k3, data = pca_data[, c("PC3", "PC4")], geom = "point")
-fviz_cluster(k3, data = data, geom = "point")
+
 ```
 
 ```{r}
@@ -123,8 +120,10 @@ eps_value <- 0.5  # Contoh nilai eps
 minPts_value <- 5 # Contoh nilai minPts
 
 # Melakukan clustering dengan DBScan
-db <- dbscan(data, eps = eps_value, minPts = minPts_value)
-fviz_cluster(db, data = data, geom = "point")
+db <- dbscan(pca_data, eps = eps_value, minPts = minPts_value)
+
+# Visualize clusters
+fviz_cluster(db, data = pca_data, geom = "point")
 ```
 
 
