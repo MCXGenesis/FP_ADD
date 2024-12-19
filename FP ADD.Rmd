@@ -1,0 +1,207 @@
+---
+title: "FPP ADD"
+output: html_document
+date: "2024-12-14"
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+library(caret)
+library(dbscan)
+library(fastcluster)
+library(prediction)
+```
+
+```{r}
+data <- read.csv("D:/ITS_KULIAH/KULIAH_Semester 3/Analitika Data dan Diagnostik/FP_ADD/Global Health Statistics.csv")
+```
+
+
+```{r}
+data_nigeria <- data %>% filter(Country == "Nigeria")
+data_nigeria
+head(data_nigeria)
+str(data_nigeria)
+```
+
+```{r}
+Nigeria_selected <- data_nigeria%>% 
+  select(Recovery.Rate...., Doctors.per.1000, Hospital.Beds.per.1000, Healthcare.Access....)
+```
+
+```{r}
+colnames(Nigeria_selected) <- c("Recovery_Rate", "Doctors_per_1000", "Hospital_Beds_per_1000", "Healthcare_Access")
+Nigeria_selected <- na.omit(Nigeria_selected)
+```
+
+```{r}
+cor_matrix <- cor(Nigeria_selected)
+print(cor_matrix)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+hist(Nigeria_selected$Recovery_Rate, main = "Distribusi Recovery Rate", xlab = "Recovery Rate (%)", col = "lightblue")
+hist(Nigeria_selected$Doctors_per_1000, main = "Distribusi Doctors per 1000", xlab = "Doctors per 1000", col = "lightgreen")
+hist(Nigeria_selected$Hospital_Beds_per_1000, main = "Distribusi Hospital Beds per 1000", xlab = "Hospital Beds per 1000", col = "lightpink")
+hist(Nigeria_selected$Healthcare_Access, main = "Distribusi Healthcare Access", xlab = "Healthcare Access (%)", col = "lightyellow")
+```
+
+### DBSCAN
+```{r}
+Nigeria_scaled <- scale(Nigeria_selected)
+
+# DBSCAN untuk deteksi anomali
+dbscan_model <- dbscan(Nigeria_scaled, eps = 0.5, minPts = 5)
+Nigeria_selected$Anomaly <- ifelse(dbscan_model$cluster == 0, "Anomaly", "Normal")
+
+table(Nigeria_selected$Anomaly)
+
+fviz_cluster(list(data = Nigeria_scaled, cluster = dbscan_model$cluster), geom = "point", stand = FALSE)
+```
+
+### IQR
+```{r}
+detect_anomalies <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR_value <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR_value
+  upper_bound <- Q3 + 1.5 * IQR_value
+  return(x < lower_bound | x > upper_bound)
+}
+
+numeric_columns <- sapply(Nigeria_selected, is.numeric)
+Nigeria_selected$Anomaly_IQR <- rowSums(sapply(Nigeria_selected[, numeric_columns], detect_anomalies)) > 0
+
+cat("Jumlah anomali ditemukan:", sum(Nigeria_selected$Anomaly_IQR), "\n")
+```
+
+## 2.2 Dependency Modeling
+```{r}
+model <- lm(Recovery_Rate ~ Doctors_per_1000 + Hospital_Beds_per_1000 + Healthcare_Access, data = Nigeria_selected)
+summary(model)
+```
+
+## 2.3 Clustering
+
+### Hierarchical Clustering
+```{r}
+hc_fast <- hclust(dist(Nigeria_scaled), method = "ward.D2")
+plot(hc_fast, main = "Dendrogram (Fast Hierarchical Clustering)", xlab = "", sub = "")
+```
+
+### K-Means Clustering
+```{r}
+set.seed(123)
+sampled_data <- Nigeria_scaled[sample(1:nrow(Nigeria_scaled), 1000), ]  # Sampel 1000 baris
+fviz_nbclust(sampled_data, kmeans, method = "wss")  # Elbow Method dengan data sampel
+
+kmeans_result <- kmeans(Nigeria_scaled, centers = 3, nstart = 10)  # Kurangi nstart
+fviz_cluster(kmeans_result, data = Nigeria_scaled)  # Visualisasi Cluster
+
+library(factoextra)
+
+# Lakukan K-Means
+set.seed(123)  # Seed untuk hasil reproducible
+kmeans_result <- kmeans(Nigeria_scaled, centers = 3, nstart = 25)
+
+# Visualisasi Cluster seperti contoh
+fviz_cluster(kmeans_result, 
+             data = Nigeria_scaled,
+             geom = "point",  # Tampilkan titik
+             ellipse.type = "convex",  # Area convex hull di sekitar cluster
+             palette = c("#2E9FDF", "#E7B800", "#FC4E07"),  # Warna sesuai preferensi
+             ggtheme = theme_minimal())
+```
+
+## 2.4 Classification
+```{r}
+# Cek nilai unik pada kolom Cluster
+table(Nigeria_selected$Cluster)
+
+set.seed(123)
+kmeans_result <- kmeans(Nigeria_scaled, centers = 3, nstart = 25)
+Nigeria_selected$Cluster <- as.factor(kmeans_result$cluster)
+
+# Cek jumlah baris data
+nrow(Nigeria_selected)
+
+# Sampling ulang data untuk memastikan cukup baris
+Nigeria_sample <- Nigeria_selected[sample(1:nrow(Nigeria_selected), size = 50, replace = TRUE), ]
+
+# Partition data
+trainIndex <- createDataPartition(Nigeria_sample$Cluster, p = 0.8, list = FALSE)
+trainData <- Nigeria_sample[trainIndex, ]
+testData <- Nigeria_sample[-trainIndex, ]
+
+summary(Nigeria_selected)
+```
+
+## 2.5 Summarization
+```{r}
+cluster_summary <- Nigeria_selected %>% 
+  group_by(Cluster) %>% 
+  summarise(
+    Recovery_Rate = mean(Recovery_Rate),
+    Doctors_per_1000 = mean(Doctors_per_1000),
+    Hospital_Beds_per_1000 = mean(Hospital_Beds_per_1000),
+    Healthcare_Access = mean(Healthcare_Access)
+  ) %>% 
+  mutate(Recommendation = case_when(
+    Recovery_Rate < 50 ~ "Tingkatkan layanan kesehatan untuk mendukung pemulihan",
+    Doctors_per_1000 < 0.5 ~ "Tingkatkan jumlah dokter per 1000 penduduk",
+    Hospital_Beds_per_1000 < 1 ~ "Tambah ketersediaan tempat tidur rumah sakit",
+    Healthcare_Access < 70 ~ "Perluas akses ke layanan kesehatan",
+    TRUE ~ "Cluster sudah memenuhi standar"
+  ))
+
+print(cluster_summary)
+```
+
+### Predicitive
+```{r}
+new_data <- data.frame(Doctors_per_1000 = c(0.2, 0.5),
+                       Hospital_Beds_per_1000 = c(0.8, 1.5),
+                       Healthcare_Access = c(50, 70))
+
+predicted_recovery <- predict(model, newdata = new_data)
+print(predicted_recovery)
+```
+
+```{r}
+library(randomForest)
+rf_model <- randomForest(Recovery_Rate ~ ., data = trainData)
+predicted_rf <- predict(rf_model, newdata = new_data)
+print(predicted_rf)
+```
+
+```{r}
+# Meleburkan matriks korelasi untuk ggplot
+cor_matrix_melted <- melt(cor_matrix)
+
+# Membuat heatmap dengan warna yang disesuaikan
+ggplot(cor_matrix_melted, aes(Var1, Var2, fill = value)) + 
+  geom_tile(color = "white", size = 0.5) +  # Menambahkan garis pemisah antar kotak
+  scale_fill_gradient2(low = "#003366", high = "#FF0000", mid = "white", midpoint = 0, limit = c(-1, 1)) + 
+  theme_minimal(base_size = 14) +  # Menggunakan tema minimal dan memperbesar ukuran font
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "brown"),  # Label miring dan warna merah
+    axis.text.y = element_text(size = 12, color = "brown"),  # Menyesuaikan ukuran teks pada sumbu Y dan warna
+    axis.title.x = element_text(size = 14),  # Menyesuaikan ukuran teks judul sumbu X
+    axis.title.y = element_text(size = 14),  # Menyesuaikan ukuran teks judul sumbu Y
+    legend.position = "right",  # Menempatkan legenda di sisi kanan
+    panel.grid = element_blank()  # Menghilangkan grid
+  ) + 
+  labs(
+    title = "Correlation Heatmap of Nigeria's Healthcare Data", 
+    x = "Variables", 
+    y = "Variables", 
+    fill = "Correlation"
+  ) + 
+  coord_fixed()  # Memperbaiki rasio kotak agar proporsional
+```
+

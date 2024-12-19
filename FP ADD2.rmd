@@ -1,0 +1,251 @@
+# DATA PREPARATION
+
+# Mengimpor library yang diperlukan untuk clustering. 
+# Disini digunakan 3 library yaitu cluster untuk analisis clustering, factoextra untuk visualisasi dari hasil clustering, dan dbscan yang menyediakan implementasi dari algoritma DBSCAN.
+
+```{r}
+# Import Library
+library(dplyr)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+library(caret)
+library(dbscan)
+library(fastcluster)
+library(reshape2)
+```
+
+# LOAD dataset
+```{r}
+data <- read.csv("D:/ITS_KULIAH/KULIAH_Semester 3/Analitika Data dan Diagnostik/FP_ADD/Global Health Statistics.csv")
+```
+
+
+# FILTER
+```{r}
+# Filter dataset untuk negara Nigeria
+data0 <- subset(data, Country == "Nigeria" & Year == "2024" & Disease.Name == "Ebola", Availability.of.Vaccines.Treatment == "Yes")
+colnames(data0)
+```
+
+
+# NORMALISASI pakai kolom yang digunakan saja
+```{r}
+# Normalisasi data untuk fitur yang relevan
+data <- scale(data0[, c("Recovery.Rate....", "Doctors.per.1000", "Hospital.Beds.per.1000", "Healthcare.Access....")])
+```
+
+```{r}
+# Sampling data untuk analisis
+set.seed(123)
+data <- normalized_data[sample(1:nrow(normalized_data), size =  50), ]
+```
+
+
+```{r}
+# Mengecek missing values
+colSums(is.na(data))
+```
+
+```{r}
+# Melting data
+boxplot_data <- melt(data)
+
+# Menampilkan struktur data untuk memeriksa apakah kolom 'variable' ada
+str(boxplot_data)
+```
+
+```{r}
+# Mengubah nama kolom Var2 menjadi 'variable'
+names(boxplot_data)[2] <- "variable"
+
+# Membuat boxplot dengan ggplot2
+library(ggplot2)
+
+ggplot(boxplot_data, aes(x = variable, y = value)) + 
+  geom_boxplot() +
+  labs(x = "Variable", y = "Value") +
+  facet_wrap(~variable, scales = "free") +  # Memastikan setiap variabel memiliki skala terpisah
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Mengatur tampilan teks sumbu X
+```
+
+
+
+```{r}
+# Hitung IQR untuk setiap kolom dalam dataset
+Q1 <- apply(data, 2, quantile, probs = 0.25)
+Q3 <- apply(data, 2, quantile, probs = 0.75)
+IQR <- Q3 - Q1
+
+# Tentukan batas atas dan batas bawah untuk setiap kolom
+upper <- Q3 + 1.5 * IQR
+lower <- Q1 - 1.5 * IQR
+
+# Hapus outlier dari setiap kolom dalam dataset
+cleaned_data <- data
+for (i in 1:ncol(data)) {
+  cleaned_data <- cleaned_data[cleaned_data[, i] >= lower[i] & cleaned_data[, i] <= upper[i], ]
+}
+
+# Tampilkan dataset yang telah dibersihkan dari outlier
+cleaned_data
+```
+
+
+```{r}
+# Seleksi kolom yang relevan untuk clustering
+kluster <- cleaned_data[, c("Recovery.Rate....", "Doctors.per.1000", "Hospital.Beds.per.1000", "Healthcare.Access....")]
+head(kluster)
+```
+
+
+
+```{r}
+# Menggunakan PCA untuk reduksi dimensi
+pca <- prcomp(kluster, center = TRUE, scale. = TRUE)
+summary(pca)
+```
+
+
+```{r}
+# Visualisasi matriks korelasi
+cor_matrix <- cor(kluster)
+cor_matrix_melted <- melt(cor_matrix)
+
+ggplot(cor_matrix_melted, aes(Var1, Var2, fill = value)) + 
+  geom_tile(color = "white", size = 0.5) +  # Menambahkan garis pemisah antar kotak
+  scale_fill_gradient2(low = "#003366", high = "#FF0000", mid = "white", midpoint = 0, limit = c(-1, 1)) + 
+  theme_minimal(base_size = 14) +  # Menggunakan tema minimal dan memperbesar ukuran font
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "brown"),  # Label miring dan warna merah
+    axis.text.y = element_text(size = 12, color = "brown"),  # Menyesuaikan ukuran teks pada sumbu Y dan warna
+    axis.title.x = element_text(size = 14),  # Menyesuaikan ukuran teks judul sumbu X
+    axis.title.y = element_text(size = 14),  # Menyesuaikan ukuran teks judul sumbu Y
+    legend.position = "right",  # Menempatkan legenda di sisi kanan
+    panel.grid = element_blank()  # Menghilangkan grid
+  ) + 
+  labs(
+    title = "Correlation Heatmap of Nigeria's Healthcare Data", 
+    x = "Variables", 
+    y = "Variables", 
+    fill = "Correlation"
+  ) + 
+  coord_fixed()  # Memperbaiki rasio kotak agar proporsional
+```
+
+
+
+```{r}
+# Scaling dan Standarisasi data
+a <- scale(kluster)
+
+# Visualisasi matriks jarak
+jarak <- get_dist(a)
+fviz_dist(jarak, gradient = list(low = "#667BC6", mid = "#FDFFD2", high = "#DA7297"))
+```
+
+
+```{r}
+# Menentukan jumlah kluster
+fviz_nbclust(kluster, kmeans, method = "wss")
+fviz_nbclust(kluster, kmeans, method = "silhouette")
+```
+
+
+```{r}
+# K-Means dengan 3 kluster
+k3 <- kmeans(a, centers = 3, nstart = 25)
+fviz_cluster(k3, data = kluster)
+```
+
+
+```{r}
+# Menentukan parameter DBScan
+eps_value <- 0.5  # Contoh nilai eps
+minPts_value <- 5 # Contoh nilai minPts
+
+# Melakukan clustering dengan DBScan
+db <- dbscan(a, eps = eps_value, minPts = minPts_value)
+fviz_cluster(db, data = a, geom = "point")
+```
+
+
+```{r}
+# Hitung Silhouette Score untuk evaluasi klasterisasi
+silhouette_score <- silhouette(k3$cluster, dist(a))
+plot(silhouette_score)
+```
+
+```{r}
+# Pilih kolom yang relevan untuk clustering
+kluster_data <- data[, c("Recovery.Rate....", "Doctors.per.1000", "Hospital.Beds.per.1000", "Healthcare.Access....")]
+
+# Normalisasi data
+kluster_scaled <- scale(kluster_data)
+
+# Tentukan jumlah kluster optimal menggunakan Elbow method
+fviz_nbclust(kluster_scaled, kmeans, method = "wss")
+
+# Klasterisasi menggunakan K-Means
+set.seed(123)
+kmeans_result <- kmeans(kluster_scaled, centers = 3, nstart = 25)
+
+# Visualisasi hasil klaster
+fviz_cluster(kmeans_result, data = kluster_scaled)
+
+# Menampilkan informasi klaster
+kmeans_result$centers
+
+# Menambahkan label klaster ke dataset untuk analisis lebih lanjut
+data$Cluster <- kmeans_result$cluster
+
+# Melihat statistik deskriptif per klaster
+aggregate(kluster_data, by = list(Cluster = data$Cluster), FUN = mean)
+```
+
+
+```{r}
+# Menambahkan label klaster ke dataset untuk analisis lebih lanjut
+data$Cluster <- kmeans_result$cluster
+
+# Melihat statistik deskriptif per klaster
+cluster_summary <- aggregate(kluster_data, by = list(Cluster = data$Cluster), FUN = mean)
+
+# Menentukan jumlah klaster optimal
+optimal_clusters <- length(unique(data$Cluster))
+
+# Menampilkan rekomendasi berdasarkan rata-rata setiap klaster
+cat("\nRekomendasi berdasarkan cluster:\n")
+for (i in 1:optimal_clusters) {
+  cat(paste("Cluster", i, ":\n"))
+  cat(paste("\t- Recovery Rate rata-rata:", round(cluster_summary$Recovery.Rate....[i], 2), "%\n"))
+  cat(paste("\t- Doctors per 1000 rata-rata:", round(cluster_summary$Doctors.per.1000[i], 2), "\n"))
+  cat(paste("\t- Hospital Beds per 1000 rata-rata:", round(cluster_summary$Hospital.Beds.per.1000[i], 2), "\n"))
+  cat(paste("\t- Healthcare Access rata-rata:", round(cluster_summary$Healthcare.Access....[i], 2), "%\n"))
+  
+  # Menentukan rekomendasi berdasarkan rata-rata
+  recommendations <- ""
+  
+  if (cluster_summary$Recovery.Rate....[i] < 50) {
+    recommendations <- paste(recommendations, "- Recovery rate rendah, perlu peningkatan dalam akses pengobatan dan perawatan medis.\n")
+  }
+  if (cluster_summary$Doctors.per.1000[i] < 1) {
+    recommendations <- paste(recommendations, "- Jumlah dokter per 1000 orang rendah, perlu penambahan tenaga medis.\n")
+  }
+  if (cluster_summary$Hospital.Beds.per.1000[i] < 2) {
+    recommendations <- paste(recommendations, "- Jumlah tempat tidur rumah sakit per 1000 orang rendah, perlu investasi dalam fasilitas rumah sakit.\n")
+  }
+  if (cluster_summary$Healthcare.Access....[i] < 70) {
+    recommendations <- paste(recommendations, "- Akses terhadap layanan kesehatan terbatas, perlu pengembangan infrastruktur kesehatan.\n")
+  }
+  
+  # Jika ada rekomendasi, tampilkan
+  if (recommendations != "") {
+    cat(paste("\t- Rekomendasi:\n"))
+    cat(recommendations)
+  } else {
+    cat("\t- Rekomendasi: Semua indikator sudah baik, teruskan kebijakan yang ada.\n")
+  }
+  cat("\n")
+}
+```

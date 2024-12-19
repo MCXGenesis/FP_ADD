@@ -1,0 +1,132 @@
+---
+title: "who needs this"
+output: html_document
+date: "2024-12-14"
+---
+```{r}
+# Import Library
+library(dplyr)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+library(caret)
+library(dbscan)
+library(fastcluster)
+library(reshape2)
+library(corrplot)
+library(ppcor)
+```
+
+# LOAD dataset
+```{r}
+data <- read.csv("D:/ITS_KULIAH/KULIAH_Semester 3/Analitika Data dan Diagnostik/FP_ADD/Global Health Statistics.csv")
+```
+
+
+# FILTER
+```{r}
+# Filter dataset untuk negara Nigeria
+data_nigeria <- data %>%
+  filter(Country == "Nigeria", Year == "2024", Disease.Name == "Ebola", Availability.of.Vaccines.Treatment == "Yes")
+```
+
+
+# NORMALISASI pakai kolom yang digunakan saja
+```{r}
+# Normalisasi data untuk fitur yang relevan
+data <- scale(data_nigeria[, c("Recovery.Rate....", "Doctors.per.1000", "Hospital.Beds.per.1000", "Healthcare.Access....")])
+```
+
+```{r}
+cor_matrix <- cor(data[])
+# Visualisasi matriks korelasi
+cor_matrix_melted <- melt(cor_matrix)
+
+ggplot(cor_matrix_melted, aes(Var1, Var2, fill = value)) + 
+  geom_tile(color = "white", size = 0.5) +  # Menambahkan garis pemisah antar kotak
+  scale_fill_gradient2(low = "#003366", high = "#FF0000", mid = "white", midpoint = 0, limit = c(-1, 1)) + 
+  theme_minimal(base_size = 14) +  # Menggunakan tema minimal dan memperbesar ukuran font
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "brown"),  # Label miring dan warna merah
+    axis.text.y = element_text(size = 12, color = "brown"),  # Menyesuaikan ukuran teks pada sumbu Y dan warna
+    axis.title.x = element_text(size = 14),  # Menyesuaikan ukuran teks judul sumbu X
+    axis.title.y = element_text(size = 14),  # Menyesuaikan ukuran teks judul sumbu Y
+    legend.position = "right",  # Menempatkan legenda di sisi kanan
+    panel.grid = element_blank()  # Menghilangkan grid
+  ) + 
+  labs(
+    title = "Correlation Heatmap of Nigeria's Healthcare Data", 
+    x = "Variables", 
+    y = "Variables", 
+    fill = "Correlation"
+  ) + 
+  coord_fixed()  # Memperbaiki rasio kotak agar proporsional
+```
+
+```{r}
+partial_corr <- pcor(data[])
+print(partial_corr)
+```
+
+```{r}
+# Visualisasi matriks jarak
+jarak <- get_dist(data)
+fviz_dist(jarak, gradient = list(low = "#667BC6", mid = "#FDFFD2", high = "#DA7297"))
+```
+
+```{r}
+# K-Means dengan 3 kluster
+k3 <- kmeans(data, centers = 2, nstart = 25)
+fviz_cluster(k3, data)
+```
+
+```{r}
+# Menentukan parameter DBScan
+eps_value <- 0.5  # Contoh nilai eps
+minPts_value <- 5 # Contoh nilai minPts
+
+# Melakukan clustering dengan DBScan
+db <- dbscan(data, eps = eps_value, minPts = minPts_value)
+fviz_cluster(db, data = data, geom = "point")
+```
+
+```{r}
+# Membuat model regresi
+reg_model <- lm(Recovery.Rate.... ~ Doctors.per.1000 + Hospital.Beds.per.1000 + Healthcare.Access...., data = as.data.frame(data))
+
+# Ringkasan model regresi
+summary(reg_model)
+```
+
+```{r}
+# Menghitung residu
+residuals <- resid(reg_model)
+
+# Menghitung nilai prediksi
+predicted_values <- predict(reg_model)
+```
+
+```{r}
+library(ggplot2)
+
+# Plot residu vs nilai prediksi
+ggplot(data.frame(Residuals = residuals, Predicted = predicted_values), aes(x = Predicted, y = Residuals)) +
+  geom_point(color = "purple", alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Plot Residu vs Nilai Prediksi",
+       x = "Nilai Prediksi",
+       y = "Residu") +
+  theme_minimal()
+```
+
+```{r}
+# QQ plot untuk memeriksa normalitas residu
+qqnorm(residuals)
+qqline(residuals, col = "blue")
+
+# Histogram residu
+ggplot(data.frame(Residuals = residuals), aes(x = Residuals)) +
+  geom_histogram(bins = 30, fill = "blue", color = "white", alpha = 0.7) +
+  labs(title = "Distribusi Residu", x = "Residu", y = "Frekuensi") +
+  theme_minimal()
+```
