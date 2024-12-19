@@ -27,14 +27,21 @@ data <- read.csv("D:/ITS_KULIAH/KULIAH_Semester 3/Analitika Data dan Diagnostik/
 ```{r}
 # Filter dataset untuk negara Nigeria
 data_nigeria <- data %>%
-  filter(Country == "Nigeria", Year == "2024", Disease.Name == "Ebola", Availability.of.Vaccines.Treatment == "Yes")
+  filter(Country == "Nigeria", 
+    Year == "2024", 
+    Disease.Name == "Ebola", 
+    Availability.of.Vaccines.Treatment == "Yes")
 ```
 
 
 # NORMALISASI pakai kolom yang digunakan saja
 ```{r}
 # Normalisasi data untuk fitur yang relevan
-data <- scale(data_nigeria[, c("Recovery.Rate....", "Doctors.per.1000", "Hospital.Beds.per.1000", "Healthcare.Access....")])
+data <- scale(data_nigeria[, 
+  c("Recovery.Rate....",
+  "Doctors.per.1000",
+  "Hospital.Beds.per.1000", 
+  "Healthcare.Access....")])
 ```
 
 ```{r}
@@ -74,10 +81,31 @@ jarak <- get_dist(data)
 fviz_dist(jarak, gradient = list(low = "#667BC6", mid = "#FDFFD2", high = "#DA7297"))
 ```
 
+### PCA
+```{r}
+pca <- prcomp(data, center = TRUE, scale. = TRUE)
+summary(pca)
+fviz_eig(pca, addlabels = TRUE, barfill = "lightblue", barcolor = "black")
+```
+
+
+### clustering
+```{r}
+# Menentukan jumlah kluster
+fviz_nbclust(data, kmeans, method = "wss")
+fviz_nbclust(data, kmeans, method = "silhouette")
+```
+
+
 ```{r}
 # K-Means dengan 3 kluster
-k3 <- kmeans(data, centers = 2, nstart = 25)
-fviz_cluster(k3, data)
+pca_data <- data.frame(pca$x)
+k3 <- kmeans(data, centers = 3, nstart = 25)
+fviz_cluster(k3, data = pca_data[, c("PC1", "PC3")], geom = "point")
+fviz_cluster(k3, data = pca_data[, c("PC2", "PC3")], geom = "point")
+fviz_cluster(k3, data = pca_data[, c("PC3", "PC4")], geom = "point")
+fviz_cluster(k3, data = pca_data[, c("PC2", "PC4")], geom = "point")
+fviz_cluster(k3, data = data)
 ```
 
 ```{r}
