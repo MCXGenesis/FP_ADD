@@ -5,19 +5,13 @@ date: "2024-12-14"
 ---
 ```{r}
 # Import Library
-library(readxl) 
-library(ggplot2) 
-library(dplyr)
-library(caret)
+library(readxl)
 library(Metrics)
 library(corrplot)
 library(factoextra)
-library(tidyverse)
 library(cluster)
-library(ppcor) 
-library(car) 
-library(reshape2)
 library(dbscan)
+library(tidyverse)
 ``` 
 
 # LOAD dataset
@@ -117,13 +111,17 @@ fviz_cluster(k3, data = pca_data[, c("PC1", "PC2")], geom = "point")
 ```{r}
 # Menentukan parameter DBScan
 eps_value <- 0.5  # Contoh nilai eps
-minPts_value <- 5 # Contoh nilai minPts
+minPts_value <- 5  # Contoh nilai minPts
 
 # Melakukan clustering dengan DBScan
-db <- dbscan(pca_data, eps = eps_value, minPts = minPts_value)
+db <- dbscan(pca_data[, 1:2], eps = eps_value, minPts = minPts_value)  # Use the first two principal components
 
 # Visualize clusters
-fviz_cluster(db, data = pca_data, geom = "point")
+fviz_cluster(db, data = pca_data[, 1:2], geom = "point", 
+              main = "DBSCAN Clustering Results",
+              xlab = "Principal Component 1", 
+              ylab = "Principal Component 2") +
+  theme_minimal()  # Optional: Use a minimal theme for better aesthetics
 ```
 
 
