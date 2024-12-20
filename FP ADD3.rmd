@@ -173,3 +173,35 @@ for (i in 1:optimal_clusters) {
   cat("\n")
 }
 ```
+
+```{r}
+# Step 1: Menggunakan PCA untuk mereduksi dimensi
+# Menggunakan PCA untuk mengurangi dimensi data
+pca <- prcomp(data_pakai, scale = TRUE)
+pca_data <- data.frame(pca$x)
+
+# Step 2: Menentukan jumlah kluster optimal menggunakan metode WSS dan Silhouette untuk K-Means
+fviz_nbclust(data_pakai, kmeans, method = "wss")  # Menggunakan metode WSS
+fviz_nbclust(data_pakai, kmeans, method = "silhouette")  # Menggunakan metode Silhouette
+
+# Step 3: Melakukan K-Means Clustering dengan jumlah kluster optimal
+# Misalnya setelah analisis, kita tentukan jumlah kluster adalah 3
+k3 <- kmeans(pca_data[, c("PC1", "PC2")], centers = 3, nstart = 25)
+
+# Visualisasi hasil clustering menggunakan K-Means (PC1 vs PC2)
+fviz_cluster(k3, data = pca_data[, c("PC1", "PC2")], geom = "point", 
+             main = "K-Means Clustering with 3 Clusters")
+
+# Step 4: DBScan Clustering
+# Menentukan nilai eps dan minPts
+eps_value <- 0.5  # Radius pencarian
+minPts_value <- 5 # Jumlah titik minimal dalam satu kluster
+
+# Melakukan clustering dengan DBScan
+library(dbscan)
+db <- dbscan(pca_data[, c("PC1", "PC2")], eps = eps_value, minPts = minPts_value)
+
+# Visualisasi hasil clustering menggunakan DBScan
+fviz_cluster(db, data = pca_data[, c("PC1", "PC2")], geom = "point", 
+             main = "DBScan Clustering")
+             ```
